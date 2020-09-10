@@ -1,11 +1,7 @@
-require('dotenv').config();
-
 const amqp = require('amqplib');
+module.exports = exports = {};
 
-
-
-
-async function create_channel(exchange_name, url = process.env.AMQP_URL) {
+exports.create_channel = async function create_channel(exchange_name, url = process.env.AMQP_URL) {
 
     return amqp.connect(url).then(conn => {
 
@@ -23,12 +19,17 @@ async function create_channel(exchange_name, url = process.env.AMQP_URL) {
     })
 }
 
-async function send_message(exchange_name, message, routing_key, channel) {
+exports.send_message = async function send_message(exchange_name, message, routing_key, channel) {
 
-    return channel.publish(exchange_name, routing_key, Buffer.from(message));
+    if (typeof message != 'object') {
+        console.error('Require message must be a object');
+        return;
+    }
+
+    return channel.publish(exchange_name, routing_key, Buffer.from(JSON.stringify(message)));
 }
 
-async function receive_message(exchange_name, routing_key, queue_name, channel, callback) {
+exports.receive_message = async function receive_message(exchange_name, routing_key, queue_name, channel, callback) {
 
     return channel.assertQueue(queue_name, {durable: true}, async function (error, ok) {
 
@@ -41,25 +42,27 @@ async function receive_message(exchange_name, routing_key, queue_name, channel, 
         return ok.queue;  
     }).then(queue => {
 
-        return channel.consume(queue, callback, { noAck: true });
+        return channel.consume(queue, (msg) => {
+            const msgInString = msg.content.toString();
+            callback(JSON.parse(msgInString));
+        }, { noAck: true });
     });
 }
 
+// (async () => {
 
-(async () => {
+//     const routing_key = 'order.created';
+//     const exchange_name = 'purchase_channel';
+//     const payment_queue_name = 'payment_queue';
 
-    const routing_key = 'order.created';
-    const exchange_name = 'purchase_channel';
-    const payment_queue_name = 'payment_queue';
-
-    let channel = await create_channel(exchange_name);
+//     let channel = await create_channel(exchange_name);
     
-    await send_message(exchange_name, 'purchase for order id is ABC', routing_key, channel);
+//     await send_message(exchange_name, 'purchase for order id is ABC', routing_key, channel);
 
-    await receive_message(exchange_name, routing_key, payment_queue_name, channel, (msg) => {
-        console.log(`Received message with content: ${msg.content.toString()}`);
-    })
+//     await receive_message(exchange_name, routing_key, payment_queue_name, channel, (msg) => {
+//         console.log(`Received message with content: ${msg.content.toString()}`);
+//     })
 
-    console.log('Done');
-})();
+//     console.log('Done');
+// })();
 
